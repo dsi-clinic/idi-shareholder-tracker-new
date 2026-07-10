@@ -10,12 +10,10 @@ console script via ``[project.scripts]``.
 # Standard imports
 import argparse
 import datetime
-import os
 import sys
 
 # Third party imports
 import pandas as pd
-from idi_ftm2j_shared.api import SecClient
 from idi_ftm2j_shared.logs import get_logger
 
 # Application imports
@@ -102,7 +100,9 @@ def get_args() -> argparse.Namespace:
 
     parser.add_argument("--rate-limit", type=float, default=0.2, help="Rate limit")
     parser.add_argument("--num-workers", type=int, default=10, help="Number of workers")
-    parser.add_argument("--fail-flush-every", type=int, default=50, help="When to flush the failure manifest")
+    parser.add_argument(
+        "--fail-flush-every", type=int, default=50, help="When to flush the failure manifest"
+    )
 
     args = parser.parse_args()
     validate_args(args, parser)
@@ -162,7 +162,7 @@ def main() -> None:
         sec_bucket=args.sec_bucket_prefix.split("/")[0],
         rate_limit=args.rate_limit,
         num_workers=args.num_workers,
-        failure_flush_every=args.fail_flush_every
+        failure_flush_every=args.fail_flush_every,
     )
     pipeline = ShareholderPipeline(config=config)
     pipeline.run()

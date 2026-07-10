@@ -13,14 +13,15 @@ import pathlib
 import threading
 from dataclasses import dataclass
 
+# Third party imports
+from idi_ftm2j_shared.sec import ScrapedDocument
+
 # Application imports
 from idi_shareholder_tracker.failures import FailureType
 
 _REMOTE_SCHEMES = ("s3://", "https://", "http://", "gs://")
-TARGET_FORM_TYPES = [
-    "13F-HR",
-    "13F-HR/A"
-]
+TARGET_FORM_TYPES = ["13F-HR", "13F-HR/A"]
+
 
 def _is_local(path: str) -> bool:
     """Return True if the path refers to a local filesystem location.
@@ -37,6 +38,19 @@ def _is_local(path: str) -> bool:
         False otherwise.
     """
     return not path.startswith(_REMOTE_SCHEMES)
+
+
+@dataclass
+class Filing:
+    """Represents a single SEC 10-K filing with its metadata and document URLs."""
+
+    cik: str
+    filing_date: str
+    form_type: str
+    accession_number: str
+    primary_document: str
+    company_name: str = ""
+    exhibit_document: ScrapedDocument | None = None
 
 
 @dataclass
@@ -73,35 +87,35 @@ class PipelineStats:
     """
 
     # --- Filing level (one 13F-HR filing / accession) ---
-    total_filings: int = 0          # loaded from S3 for the date range
-    skipped_filings: int = 0        # already in output parquet (resume)
-    processed_filings: int = 0      # produced >=1 holding row
-    failed_filings: int = 0         # skipped this run due to a failure (any type)
+    total_filings: int = 0  # loaded from S3 for the date range
+    skipped_filings: int = 0  # already in output parquet (resume)
+    processed_filings: int = 0  # produced >=1 holding row
+    failed_filings: int = 0  # skipped this run due to a failure (any type)
 
     # --- Document selection (cover page is supplementary, so not a FailureType) ---
-    missing_cover_page: int = 0     # no cover-page doc; holdings still emitted
+    missing_cover_page: int = 0  # no cover-page doc; holdings still emitted
     unparsable_cover_page: int = 0  # cover-page failed to parse; holdings still emitted
 
     # --- Holding level (StockResult) ---
-    total_holdings: int = 0         # holdings parsed across all filings
-    dropped_holdings: int = 0       # dropped as invalid/duplicate in normalize
-    missing_value: int = 0          # holding missing value_x1000
-    missing_shares: int = 0         # holding missing shares/prn amount
+    total_holdings: int = 0  # holdings parsed across all filings
+    dropped_holdings: int = 0  # dropped as invalid/duplicate in normalize
+    missing_value: int = 0  # holding missing value_x1000
+    missing_shares: int = 0  # holding missing shares/prn amount
 
     # --- Manager resolution (cover-page numbers -> names) ---
-    total_managers: int = 0             # ManagerResult entries parsed
-    unresolved_manager_numbers: int = 0 # other-manager # with no name on cover page
+    total_managers: int = 0  # ManagerResult entries parsed
+    unresolved_manager_numbers: int = 0  # other-manager # with no name on cover page
 
     # --- Normalization grounding ---
-    unmapped_place_codes: int = 0   # EDGAR state/country code with no mapping
+    unmapped_place_codes: int = 0  # EDGAR state/country code with no mapping
 
     # --- Enrichment (static sources merged in) ---
-    nbim_rows: int = 0              # rows merged from NBIM
-    pension_fund_rows: int = 0      # rows merged from pension funds
+    nbim_rows: int = 0  # rows merged from NBIM
+    pension_fund_rows: int = 0  # rows merged from pension funds
     aggregated_securities: int = 0  # distinct securities after aggregate-by-security
 
     # --- Output ---
-    output_rows: int = 0            # rows written to Parquet
+    output_rows: int = 0  # rows written to Parquet
 
     def __post_init__(self) -> None:
         """Initialize the lock and one counter per failure type."""

@@ -21,15 +21,15 @@ class FailureType(StrEnum):
 
     # --- Permanent: properties of the scraped S3 artifact (retry won't help) ---
     NO_INFORMATION_TABLE = "no_information_table"  # filing manifest has no info-table document
-    NO_DOCUMENT_CONTENT = "no_document_content"    # info-table S3 object missing/empty
-    UNPARSABLE_TABLE = "unparsable_table"        # info-table HTML/XML failed to parse
-    MISMATCHED_LENGTHS = "mismatched_lengths"      # parsed parallel columns unequal length
-    NO_FORM_DATA = "no_form_data"                  # table present but no data rows
-    NO_HOLDINGS = "no_holdings"                    # table parsed to zero holdings
+    NO_DOCUMENT_CONTENT = "no_document_content"  # info-table S3 object missing/empty
+    UNPARSABLE_TABLE = "unparsable_table"  # info-table HTML/XML failed to parse
+    MISMATCHED_LENGTHS = "mismatched_lengths"  # parsed parallel columns unequal length
+    NO_FORM_DATA = "no_form_data"  # table present but no data rows
+    NO_HOLDINGS = "no_holdings"  # table parsed to zero holdings
 
     # --- Transient: live SEC submissions API for company metadata ---
-    API_ERROR = "api_error"                        # HTTP failure fetching company metadata
-    RATE_LIMIT = "rate_limit"                      # SEC rate limit (429)
+    API_ERROR = "api_error"  # HTTP failure fetching company metadata
+    RATE_LIMIT = "rate_limit"  # SEC rate limit (429)
 
 
 class ShareholderFailureClassifier(FailureClassifier):
