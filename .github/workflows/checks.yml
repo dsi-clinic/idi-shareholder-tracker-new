@@ -29,3 +29,4 @@ jobs:
     with:
       app-name: shareholder-tracker
       cov-package: idi_shareholder_tracker
+      python-version: "3.14"
