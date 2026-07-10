@@ -1,0 +1,12 @@
+name: idi
+runtime: python
+description: AWS ECS infrastructure for IDI Shareholder Tracker Pipeline
+
+config:
+  aws:region:
+    description: AWS region to deploy to
+    value: us-east-2
+
+  idi:app_name:
+    description: Name of the application
+    default: "shareholder-tracker"
