@@ -10,18 +10,22 @@ resumable, failure-aware runs.
 """
 
 # Standard application imports
+import os
+import queue
 import threading
 from abc import ABC, abstractmethod
+from itertools import islice
 
 # Third party imports
 import pandas as pd
 from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
 from idi_ftm2j_shared.sec import ScrapedDocument, ScrapedFiling, iter_filings_by_form_type
+from idi_ftm2j_shared.storage import load_content
 
 # Application imports
 from idi_shareholder_tracker.failures import FailureType, ShareholderFailureClassifier
-from idi_shareholder_tracker.types import TARGET_FORM_TYPES, Filing, PipelineConfig, PipelineStats
+from idi_shareholder_tracker.types import TARGET_FORM_TYPES, Filing, PipelineConfig, PipelineStats, TableData
 
 
 class CompanyMetaFetchError(Exception):
@@ -116,6 +120,9 @@ class Pipeline(ABC):
 
 class ShareholderPipeline(Pipeline):
     """Pipeline that fetches Exhibit 13F-HR filings from SEC EDGAR and extracts shareholder data."""
+
+    _LOG_EVERY = 5
+    _INPUT_SAMPLE_SIZE = int(os.environ.get("INPUT_SAMPLE_SIZE", 0))
 
     def __init__(self, config: PipelineConfig) -> None:
         """Initialize the subsidiary pipeline with failure registry.
@@ -235,6 +242,8 @@ class ShareholderPipeline(Pipeline):
             bucket=self.config.sec_bucket,
             include_failures=True,
         )
+        if self._INPUT_SAMPLE_SIZE:
+            scraped_filings = islice(scraped_filings, self._INPUT_SAMPLE_SIZE)
 
         filings = []
         for scraped_filing in scraped_filings:
@@ -271,6 +280,66 @@ class ShareholderPipeline(Pipeline):
 
         return filings
 
+    def _extract_worker(self, work_queue: queue.Queue, shareholder_list: list) -> None:
+        while True:
+            filing, table_data = work_queue.get()
+            try:
+                print("table processing...")
+            except Exception as e:
+                self._record_failure(
+                    (filing.cik, filing.accession_number),
+                    FailureType.NO_DOCUMENT_CONTENT,
+                    "error",
+                    "No document content for filing: %s - %s - %s: %s @ %s",
+                    filing.cik,
+                    filing.accession_number,
+                    filing.filing_date,
+                    e,
+                    table_data.url,
+                )
+
+            finally:
+                work_queue.task_done()
+                self.stats.increment("processed_filings")
+                if self.stats.processed_filings % self._LOG_EVERY == 0:
+                    self.logger.info(
+                        "Extracted %d / %d documents",
+                        self.stats.processed_filings,
+                        self.stats.queued_filings,
+                    )
+
+    def _fetch_info_table(self, filing) -> TableData:
+        try:
+            raw_info_table = load_content(filing.exhibit_document.s3_key)
+        except Exception as e:
+            self._record_failure(
+                (filing.cik, filing.accession_number),
+                FailureType.NO_DOCUMENT_CONTENT,
+                "error",
+                "Failed to fetch exhibit %s - %s - %s from S3 (%s): %s",
+                filing.exhibit_document.filename,
+                filing.cik,
+                filing.accession_number,
+                filing.exhibit_document.s3_key,
+                e,
+            )
+            return TableData(filing.exhibit_document.url, bytes())
+
+        if not raw_info_table:
+            self._record_failure(
+                (filing.cik, filing.accession_number),
+                FailureType.NO_DOCUMENT_CONTENT,
+                "error",
+                "Exhibit %s - %s - %s does not have content (%s).",
+                filing.exhibit_document.filename,
+                filing.cik,
+                filing.accession_number,
+                filing.exhibit_document.s3_key,
+            )
+            return TableData(filing.exhibit_document.url, bytes())
+
+        return TableData(filing.exhibit_document.url, raw_info_table)
+
     def process(self, input_list: list) -> list:
         """Process each item in the input list and return a list of results.
 
@@ -281,7 +350,25 @@ class ShareholderPipeline(Pipeline):
             List of processed results. The concrete element type is defined by
             each subclass (e.g. ``list[Subsidiary]``).
         """
-        return []
+        work_queue = queue.Queue(maxsize=self.config.num_workers * 2)
+        shareholders = []
+
+        extract_workers = [
+            threading.Thread(
+                target=self._extract_worker,
+                args=(work_queue, shareholders),
+                daemon=True,
+                name=f"extract-worker-{i}",
+            )
+            for i in range(self.config.num_workers)
+        ]
+        for worker in extract_workers:
+            worker.start()
+
+        for filing in input_list:
+            table_data = self._fetch_info_table(filing)
+            work_queue.put((filing, table_data))
+            self.stats.increment("queued_filings")
 
     def save_output(self, processed_list: list) -> None:
         """Persist the processed results to the configured output destination.

@@ -54,6 +54,14 @@ class Filing:
 
 
 @dataclass
+class TableData:
+    """Represents the extracted raw info table contents paired with URL."""
+
+    url: str
+    raw_info_table: bytes
+
+
+@dataclass
 class PipelineConfig:
     """Configuration for the subsidiary pipeline."""
 
@@ -89,6 +97,7 @@ class PipelineStats:
     # --- Filing level (one 13F-HR filing / accession) ---
     total_filings: int = 0  # loaded from S3 for the date range
     skipped_filings: int = 0  # already in output parquet (resume)
+    queued_filings: int = 0  # queued for processing, info table extraction
     processed_filings: int = 0  # produced >=1 holding row
     failed_filings: int = 0  # skipped this run due to a failure (any type)
 
