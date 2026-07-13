@@ -105,10 +105,6 @@ class Pipeline(ABC):
         input_data = self.load_input()
         self.logger.info("Located %d filings with exhibits to process", len(input_data))
 
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-        print(input_data)
-        print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-
         if input_data:
             results = self.process(input_data)
             self.save_output(results)
@@ -221,9 +217,11 @@ class ShareholderPipeline(Pipeline):
     def load_input(self) -> list[Filing]:
         """Load input data from the SEC and return a list of filings.
 
-        Filings with no matching exhibit documents are recorded as
-        ``NO_EXHIBIT_FOUND`` failures and excluded from the returned list, so
+        Filings with no matching information-table document are recorded as
+        ``NO_INFORMATION_TABLE`` failures and excluded from the returned list, so
         the count reflects filings that actually have exhibit content to fetch.
+        Filings already present in the output file or the failure registry are
+        skipped before this check.
 
         Returns:
             A list of Filing objects

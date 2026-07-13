@@ -25,6 +25,11 @@ dev = [
     "ruff>=0.15.21",
 ]
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: end-to-end wiring tests (heavier than unit tests; dependencies are mocked but the full orchestrator/pipeline path is exercised)",
+]
+
 [tool.ruff]
 line-length = 100
 
