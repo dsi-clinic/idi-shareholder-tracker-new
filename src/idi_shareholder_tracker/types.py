@@ -50,15 +50,18 @@ class Filing:
     accession_number: str
     primary_document: str
     company_name: str = ""
-    exhibit_document: ScrapedDocument | None = None
+    exhibit_info_table: ScrapedDocument | None = None
+    exhibit_cover_page: ScrapedDocument | None = None
 
 
 @dataclass
 class TableData:
     """Represents the extracted raw info table contents paired with URL."""
 
-    url: str
     raw_info_table: bytes
+    raw_info_table_url: str
+    raw_cover_page: bytes
+    raw_cover_page_url: str
 
 
 @dataclass

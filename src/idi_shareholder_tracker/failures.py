@@ -21,6 +21,7 @@ class FailureType(StrEnum):
 
     # --- Permanent: properties of the scraped S3 artifact (retry won't help) ---
     NO_INFORMATION_TABLE = "no_information_table"  # filing manifest has no info-table document
+    NO_COVER_PAGE = "no_cover_page"  # no cover page could be located in the filing
     NO_DOCUMENT_CONTENT = "no_document_content"  # info-table S3 object missing/empty
     UNPARSABLE_TABLE = "unparsable_table"  # info-table HTML/XML failed to parse
     MISMATCHED_LENGTHS = "mismatched_lengths"  # parsed parallel columns unequal length

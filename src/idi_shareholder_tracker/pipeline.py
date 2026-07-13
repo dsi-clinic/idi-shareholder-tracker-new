@@ -203,6 +203,18 @@ class ShareholderPipeline(Pipeline):
         )
         return info_table
 
+    @staticmethod
+    def _select_cover_page(scraped_filing: ScrapedFiling) -> ScrapedDocument | None:
+        """Return the primary (cover-page) document, or None."""
+        return next(
+            (
+                d for d in scraped_filing.documents
+                if (d.filename or "").strip().lower() == "primary_doc.html"
+                or (d.seq or "").strip() == "1"
+            ),
+            None,
+        )
+
     def _should_skip(self, filing: Filing, processed_accessions: set[str]) -> bool:
         """Return True if the filing was already processed or previously failed.
 
@@ -256,13 +268,14 @@ class ShareholderPipeline(Pipeline):
                 primary_document=scraped_filing.index_url,
                 company_name=scraped_filing.company_name,
             )
-            filing.exhibit_document = self._select_info_table(scraped_filing)
+            filing.exhibit_info_table = self._select_info_table(scraped_filing)
+            filing.exhibit_cover_page = self._select_cover_page(scraped_filing)
 
             if self._should_skip(filing, processed_accessions):
                 self.stats.increment("skipped_filings")
                 continue
 
-            if not filing.exhibit_document:
+            if not filing.exhibit_info_table:
                 self._record_failure(
                     (scraped_filing.cik, scraped_filing.accession_number),
                     FailureType.NO_INFORMATION_TABLE,
@@ -310,35 +323,49 @@ class ShareholderPipeline(Pipeline):
 
     def _fetch_info_table(self, filing) -> TableData:
         try:
-            raw_info_table = load_content(filing.exhibit_document.s3_key)
+            raw_info_table = load_content(filing.exhibit_info_table.s3_key)
+            raw_cover_page = load_content(filing.exhibit_cover_page.s3_key)
         except Exception as e:
             self._record_failure(
                 (filing.cik, filing.accession_number),
                 FailureType.NO_DOCUMENT_CONTENT,
                 "error",
                 "Failed to fetch exhibit %s - %s - %s from S3 (%s): %s",
-                filing.exhibit_document.filename,
+                filing.exhibit_info_table.filename,
                 filing.cik,
                 filing.accession_number,
-                filing.exhibit_document.s3_key,
+                filing.exhibit_info_table.s3_key,
                 e,
             )
-            return TableData(filing.exhibit_document.url, bytes())
+            return TableData(bytes(), filing.exhibit_info_table.url, bytes(), filing.exhibit_cover_page.url)
 
         if not raw_info_table:
             self._record_failure(
                 (filing.cik, filing.accession_number),
                 FailureType.NO_DOCUMENT_CONTENT,
                 "error",
-                "Exhibit %s - %s - %s does not have content (%s).",
+                "Exhibit's info table %s - %s - %s does not have content (%s).",
+                filing.exhibit_info_table.filename,
+                filing.cik,
+                filing.accession_number,
+                filing.exhibit_info_table.s3_key,
+            )
+            return TableData(bytes(), filing.exhibit_info_table.url, bytes(), filing.exhibit_cover_page.url)
+
+        if not raw_cover_page:
+            self._record_failure(
+                (filing.cik, filing.accession_number),
+                FailureType.NO_DOCUMENT_CONTENT,
+                "warning",  # only a warning, it is okay to proceed without
+                "Exhibit's cover page %s - %s - %s does not have content (%s).",
                 filing.exhibit_document.filename,
                 filing.cik,
                 filing.accession_number,
-                filing.exhibit_document.s3_key,
+                filing.exhibit_cover_page.s3_key,
             )
-            return TableData(filing.exhibit_document.url, bytes())
+            return TableData(raw_info_table, filing.exhibit_info_table.url, bytes(), filing.exhibit_cover_page.url)
 
-        return TableData(filing.exhibit_document.url, raw_info_table)
+        return TableData(raw_info_table, filing.exhibit_info_table.url, raw_cover_page, filing.exhibit_cover_page.url)
 
     def process(self, input_list: list) -> list:
         """Process each item in the input list and return a list of results.
@@ -367,8 +394,11 @@ class ShareholderPipeline(Pipeline):
 
         for filing in input_list:
             table_data = self._fetch_info_table(filing)
-            work_queue.put((filing, table_data))
-            self.stats.increment("queued_filings")
+            print(table_data.raw_cover_page)
+            exit()
+            if table_data.raw_info_table:
+                work_queue.put((filing, table_data))
+                self.stats.increment("queued_filings")
 
     def save_output(self, processed_list: list) -> None:
         """Persist the processed results to the configured output destination.
